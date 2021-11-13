@@ -5,14 +5,16 @@ import aiosqlite
 import asyncpraw
 import mystbin
 from utilities import loader
+import jishaku
 
 extensions = [
-
+    'jishaku',
+    "extensions.programming"
 ]
 
 
 async def command_prefix(client, message):
-    return "sb "
+    return "sbb "
 
 
 class soosBot(commands.Bot):
@@ -20,13 +22,13 @@ class soosBot(commands.Bot):
         self.database = None
         self.mystbin = None
         self.reddit = None
-        self.aiohttp_session = aiohttp.ClientSession()
+        self.aiohttp_session = None
         self.user_agent = f"soosBot - Multi-Purpose Discord Bot. [soosBot.com] | enhanced-discord.py version : " \
                           f"{discord.__version__} | aiohttp version : {aiohttp.__version__} "
         super().__init__(
             command_prefix=command_prefix,
             case_insensitive=True,
-            intents=discord.Intents(guilds=True, messages=True, members=True, reactions=True),
+            intents=discord.Intents(guilds=True, messages=True, members=False, reactions=True),
             activity=discord.Activity(
                 type=discord.ActivityType.playing, name="soosBot.com | @soosBot"
             ),
@@ -38,6 +40,7 @@ class soosBot(commands.Bot):
 
     async def start(self, *args, **kwargs):
         self.database = await aiosqlite.connect("database.db")
+        self.aiohttp_session = aiohttp.ClientSession()
         self.mystbin = mystbin.Client(session=self.aiohttp_session)
         configuration = loader.load_json("configuration.json")
         self.reddit = asyncpraw.Reddit(client_id=configuration["praw"]["client_id"],

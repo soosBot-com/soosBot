@@ -1,6 +1,9 @@
 from utilities import loader
 from soosbot import soosBot
 
+# This import is for development purposes only.
+from cogwatch import Watcher
+
 client = soosBot()
 client.loaded = False
 
@@ -13,6 +16,12 @@ async def on_ready():
           f" {len(client.guilds)} guild(s),"
           f" and {sum([x.member_count for x in client.guilds])} user(s).")
     client.loaded = True
+
+    # This code is for development purposes.
+    # It is used for hot reloading cogs while edits occur.
+
+    watcher = Watcher(client, path="extensions")
+    await watcher.start()
 
 
 def main():

@@ -9,7 +9,10 @@ import jishaku
 
 extensions = [
     'jishaku',
-    "extensions.programming"
+    "extensions.programming",
+    "extensions.reddit",
+    "extensions.user",
+    "extensions.information"
 ]
 
 
@@ -63,5 +66,22 @@ class soosBot(commands.Bot):
         await self.reddit.close()
         await super().close()
         print(f"{self.user} stopped.")
+
+    async def get_users_theme_color(self, user_id):
+        return discord.Colour.from_rgb(47, 49, 54)
+        await self.wait_until_ready()
+        cursor = await self.database.cursor()
+        await cursor.execute("""SELECT theme FROM user_data WHERE user_id = ?""", (int(user_id),))
+        theme = await cursor.fetchone()
+        await cursor.close()
+        if theme:
+            if theme[0] == "dark":
+                return discord.Colour.from_rgb(47, 49, 54)
+            elif theme[0] == "light":
+                return discord.Colour.from_rgb(242, 242, 245)
+            else:
+                return await commands.ColourConverter().convert(None, theme[0])
+        else:
+            return discord.Colour.from_rgb(47, 49, 54)
 
 

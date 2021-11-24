@@ -12,7 +12,8 @@ extensions = [
     "extensions.programming",
     "extensions.reddit",
     "extensions.user",
-    "extensions.information"
+    "extensions.information",
+    "extensions.search"
 ]
 
 
@@ -26,12 +27,13 @@ class soosBot(commands.Bot):
         self.mystbin = None
         self.reddit = None
         self.aiohttp_session = None
+        self.rapid_api_key = None
         self.user_agent = f"soosBot - Multi-Purpose Discord Bot. [soosBot.com] | enhanced-discord.py version : " \
                           f"{discord.__version__} | aiohttp version : {aiohttp.__version__} "
         super().__init__(
             command_prefix=command_prefix,
             case_insensitive=True,
-            intents=discord.Intents(guilds=True, messages=True, members=False, reactions=True),
+            intents=discord.Intents(guilds=True, messages=True, members=True, reactions=True),
             activity=discord.Activity(
                 type=discord.ActivityType.playing, name="soosBot.com | @soosBot"
             ),
@@ -52,6 +54,7 @@ class soosBot(commands.Bot):
                                        username=configuration["praw"]["username"],
                                        password=configuration["praw"]["password"],
                                        requestor_kwargs={"session": self.aiohttp_session})
+        self.rapid_api_key = configuration["rapid_api_key"]
 
         # Load all cogs in the list "cogs" to client.
         for extension in extensions:
@@ -83,5 +86,8 @@ class soosBot(commands.Bot):
                 return await commands.ColourConverter().convert(None, theme[0])
         else:
             return discord.Colour.from_rgb(47, 49, 54)
+
+    async def get_guilds_prefix(self, guild_id):
+        return "sbb "
 
 

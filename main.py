@@ -20,13 +20,13 @@ async def on_ready():
     # This code is for development purposes.
     # It is used for hot reloading cogs while edits occur.
 
-    watcher = Watcher(client, path="extensions")
+    watcher = Watcher(client, path="extensions", preload=False)
     await watcher.start()
 
 
 def main():
     config = loader.load_json("configuration.json")
-    client.run(config["tokens"]["soosBot"])
+    client.run(config["tokens"]["soosBot-BETA"])
 
 
 if __name__ == "__main__":

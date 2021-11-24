@@ -30,10 +30,13 @@ class ButtonSaved(ui.View):
         self.client = None
         self.cursor = None
         self.message = None
+        self.deleted = []
 
     async def start(self, client, ctx):
         self.user = ctx.author
         self.client = client
+
+        self.remove_item(self.undo)
 
         if ctx.interaction:
             await ctx.interaction.response.defer()
@@ -164,16 +167,24 @@ class ButtonSaved(ui.View):
     @ui.button(label="Delete", emoji=PartialEmoji(name="soosBot_trash", id=795313016908152833, animated=False),
                style=ButtonStyle.danger)
     async def delete(self, button: ui.Button, interaction: Interaction):
-        await self.cursor.execute("""SELECT * FROM saved_memes WHERE user_id = ?""", (self.user.id,))
-        memes = await self.cursor.fetchall()
         if interaction.user != self.user:
             embed = discord.Embed(description="You cannot control this command because you did not execute it.",
                                   color=discord.Colour.red())
             return await interaction.response.send_message(embed=embed, ephemeral=True)
+        await self.cursor.execute("""SELECT * FROM saved_memes WHERE user_id = ?""", (self.user.id,))
+        memes = await self.cursor.fetchall()
         await self.cursor.execute(
             """DELETE FROM saved_memes WHERE user_id = ? AND subreddit = ? AND title = ? AND url = ? AND 
             content = ?""",
             (memes[self.page][0], memes[self.page][1], memes[self.page][2], memes[self.page][3], memes[self.page][4]))
+        self.deleted.append([
+            memes[self.page][0], memes[self.page][1], memes[self.page][2], memes[self.page][3], memes[self.page][4]
+        ])
+        self.clear_items()
+        self.add_item(self.back)
+        self.add_item(self.forward)
+        self.add_item(self.delete)
+        self.add_item(self.undo)
         await self.client.database.commit()
         await self.cursor.execute("""SELECT * FROM saved_memes WHERE user_id = ?""", (self.user.id,))
         memes = await self.cursor.fetchall()
@@ -201,14 +212,68 @@ class ButtonSaved(ui.View):
                 await interaction.response.edit_message(
                     embed=em, view=self)
         except IndexError:
-            for button in self.children:
-                button.disabled = True
+            self.delete.disabled = True
+            self.forward.disabled = True
+            self.back.disabled = True
             embed = discord.Embed(title="You haven't saved any memes.",
                                   color=await self.client.get_users_theme_color(self.user.id)).set_image(
                 url="https://cdn.soosbot.com/images/commands/empty.png")
             await interaction.response.edit_message(
                 embed=embed, view=self)
-            self.stop()
+
+    @ui.button(label="Undo Delete", emoji=PartialEmoji(name="undo", id=911437512524836935))
+    async def undo(self, button: ui.Button, interaction: Interaction):
+        if interaction.user != self.user:
+            embed = discord.Embed(description="You cannot control this command because you did not execute it.",
+                                  color=discord.Colour.red())
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
+        deleted_post = self.deleted[-1]
+
+        await self.cursor.execute("""INSERT INTO saved_memes VALUES (?, ?, ?, ?, ?)""",
+                                  (deleted_post[0], deleted_post[1], deleted_post[2], deleted_post[3], deleted_post[4]))
+        await self.client.database.commit()
+        self.deleted.pop(-1)
+        if not self.deleted:
+            self.remove_item(self.undo)
+
+        await self.cursor.execute("""SELECT * FROM saved_memes WHERE user_id = ?""", (self.user.id,))
+        memes = await self.cursor.fetchall()
+        self.page = len(memes) - 1
+
+        em = discord.Embed(title=memes[self.page][2],
+                           color=await self.client.get_users_theme_color(self.user.id))
+        em.set_author(
+            name=f"r/{memes[self.page][1]}")
+        em.set_footer(text=f"Page {self.page + 1}/{len(memes)}")
+        em.url = memes[self.page][3]
+        content = memes[self.page][4]
+        await self.cursor.execute("SELECT * FROM subreddits WHERE subreddit = ?", (memes[self.page][1],))
+        data = await self.cursor.fetchone()
+        if not data:
+            content = "https://cdn.soosbot.com/images/commands/notApproved.png"
+        if self.page == 0 and self.started:
+            if ".gifv" in content or ".mp4" in content or ".webm" in content or "youtube" in content or "v.redd.it" in content or "youtu.be" in content or 'comments' in content or 'gfycat.com' in content or "kapwing" in content or "kapwi" in content:
+                em.description = content
+                await interaction.response.edit_message(
+                    embed=em, view=self)
+            else:
+                em.set_image(url=content)
+                await interaction.response.edit_message(
+                    embed=em, view=self)
+        else:
+            if ".gifv" in content or ".mp4" in content or ".webm" in content or "youtube" in content or "v.redd.it" in content or "youtu.be" in content or 'comments' in content or 'gfycat.com' in content or "kapwing" in content or "kapwi" in content:
+                em.description = content
+                await interaction.response.edit_message(
+                    embed=em, view=self)
+            else:
+                em.set_image(url=content)
+                await interaction.response.edit_message(
+                    embed=em, view=self)
+
+        self.delete.disabled = False
+        self.forward.disabled = False
+        self.back.disabled = False
+        await self.message.edit(view=self)
 
 
 class RedditCommands(commands.Cog):
@@ -218,16 +283,41 @@ class RedditCommands(commands.Cog):
         self.refresh_cached_memes.start()
         self.active_memes_delete.start()
         self.seen_memes = {}
+        self.cached_icons = {}
+
+    async def cache_icon(self, subreddit, *, sub_icon=None):
+        if sub_icon:
+            self.cached_icons[subreddit] = sub_icon
+        else:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_4) AppleWebKit/537.36 (KHTML, like Gecko) '
+                              'Chrome/75.0.3770.100 Safari/537.36 '
+            }
+            response = await self.client.aiohttp_session.get(f"https://reddit.com/r/{subreddit}/about.json", headers=headers)
+            data = await response.json()
+            print(data)
+            print(data["data"]["icon_img"])
+            # DOESNT FUCKING WORK REDDIT IS RETARDED
+            # tried getting icon image with asyncpraw, and failed (except for dankmemes for some reason)
+            # also fails with aiohttp/web requests, EVEN with user agent.
+            return data["data"]["icon_img"]
+
+    def get_cached_icon(self, subreddit):
+        if subreddit in self.cached_icons:
+            return self.cached_icons[subreddit]
+        return ""
 
     @tasks.loop(seconds=300)
     async def refresh_cached_memes(self):
         posts = []
         sub = await self.client.reddit.subreddit("dankmemes")
         await sub.load()
-        async for submission in sub.hot(limit=50):
+        async for submission in sub.hot(limit=10):
             posts.append(submission)
         self.cached_memes = posts
         self.seen_memes = {}
+
+        await self.cache_icon("dankmemes", sub_icon=sub.icon_img)
 
     @tasks.loop(hours=24)
     async def active_memes_delete(self):
@@ -240,11 +330,14 @@ class RedditCommands(commands.Cog):
     async def before_active_memes_delete(self):
         await asyncio.sleep(86400)
 
-    async def send_reddit_post(self, ctx, subreddit, title, author, url, content, score, comments, *, savable, nsfw):
+    async def send_reddit_post(self, ctx,  subreddit, title, author, url, content, score, comments, *, savable, nsfw):
+        sub_icon = self.get_cached_icon(subreddit)
+        if not sub_icon:
+            sub_icon = await self.cache_icon(subreddit)
         cursor = await self.client.database.cursor()
         embed = discord.Embed(title=title,
                               color=await self.client.get_users_theme_color(ctx.author.id))
-        embed.set_author(name=f"r/{subreddit}")
+        embed.set_author(name=f"r/{subreddit}", icon_url=sub_icon)
         embed.url = url
         if nsfw:
             embed.set_thumbnail(url="https://cdn.soosbot.com/images/commands/NSFW.png")
@@ -269,7 +362,6 @@ class RedditCommands(commands.Cog):
             await self.client.database.commit()
             await post.add_reaction("<:soosBot_save:795131937592311848>")
             await cursor.close()
-            print("meme added t")
 
     @commands.command(slash_command=True)
     @commands.cooldown(1, 4, commands.BucketType.user)
@@ -296,7 +388,7 @@ class RedditCommands(commands.Cog):
         comments = post.num_comments
         author = post.author.name
         await self.send_reddit_post(ctx, "dankmemes", title, author, url, content, score, comments, savable=True,
-                                    nsfw=False)
+                                    nsfw=False,)
         self.seen_memes[ctx.guild.id].append(url)
 
     # @cog_ext.cog_slash(name="meme", guild_ids=[793213521181147178, 536983354936000537], description="Retrieve top posts from r/dankmemes")
@@ -363,8 +455,7 @@ class RedditCommands(commands.Cog):
     @commands.cooldown(1, 4, commands.BucketType.user)
     async def posts(self, ctx, *, subreddit=commands.Option(description="A valid reddit subreddit.")):
         """Retrieve a post from the provided subreddit!"""
-        sub = await self.client.reddit.subreddit(subreddit)
-        await sub.load()
+        sub = await self.client.reddit.subreddit(subreddit, fetch=True)
         if sub.over18:
             if ctx.channel.is_nsfw():
                 if ctx.interaction:

@@ -15,6 +15,7 @@ class InformationCommands(commands.Cog):
         periods, e.g. tag.create for the create subcommand of the tag command
         or by spaces.
         """
+        cmd = command
         source_url = 'https://github.com/soosBot-com/soosBot'
         branch = 'main'
 
@@ -45,8 +46,13 @@ class InformationCommands(commands.Cog):
             source_url = 'https://github.com/Rapptz/discord.py'
             branch = 'master'
 
-        final_url = f'<{source_url}/blob/{branch}/{location}#L{firstlineno}-L{firstlineno + len(lines)}>'
-        await ctx.send(final_url)
+        final_url = f'{source_url}/blob/{branch}/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}'
+
+        await ctx.message.reply(embed=discord.Embed(
+            description=f"*Source code of the `{cmd}` command*\n"
+                        f"[{final_url.replace('https://', '')}]({final_url})",
+            color=await self.client.get_users_theme_color(ctx.author.id)
+        ))
 
 
 def setup(client):

@@ -20,8 +20,7 @@ async def generate_urban_dictionary_embeds(client, ctx, word):
         'x-rapidapi-key': client.rapid_api_key,
         'x-rapidapi-host': "mashape-community-urban-dictionary.p.rapidapi.com"
     }
-    response = await client.aiohttp_session.get(url, headers=headers, params=querystring)
-    word_information = await response.json()
+    word_information = await client.requests(url, headers=headers, params=querystring)
     embeds = []
     for i in range(len(word_information["list"])):
         definition = word_information['list'][i]['definition']
@@ -31,7 +30,8 @@ async def generate_urban_dictionary_embeds(client, ctx, word):
         definition = cleanup_definition(definition)
         if len(definition) > 1000:
             definition = definition[:997] + "..."
-        em = discord.Embed(title="Urban Dictionary", color=await client.get_users_theme_color(ctx.author.id))
+        em = discord.Embed(title="Urban Dictionary", color=await client.get_users_theme_color(ctx.author.id), url=f"https://{word.replace(' ', '-')}.urbanup.com")
+        print(f"https://{word.replace(' ', '_')}.urbanup.com")
         if ctx.guild.id == 681882711945641997:
             pass
             # em.description = f"**Definition of {await client.censor_text(word)}**\n" \

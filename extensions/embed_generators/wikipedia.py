@@ -2,7 +2,7 @@ import discord
 
 
 async def generate_wikipedia_embeds(client, ctx, query) -> list[discord.Embed]:
-    response = await client.aiohttp_session.get(
+    data = await client.requests(
         "http://en.wikipedia.org/w/api.php",
         params={
             'list': 'search',
@@ -12,12 +12,9 @@ async def generate_wikipedia_embeds(client, ctx, query) -> list[discord.Embed]:
             'format': 'json',
             'action': 'query'
         },
-        headers={
-            "User-Agent": "soosBot"
-        }
+        user_agent="soosBot",
+        cache=True
     )
-
-    data = await response.json()
     try:
         query = data["query"]["search"][0]["title"]
     except (KeyError, IndexError):
@@ -25,7 +22,7 @@ async def generate_wikipedia_embeds(client, ctx, query) -> list[discord.Embed]:
     page = data["query"]["search"][0]["pageid"]
 
     # Getting page data.
-    response = await client.aiohttp_session.get(
+    data = await client.requests(
         "http://en.wikipedia.org/w/api.php",
         params={
             'prop': 'extracts',
@@ -34,12 +31,10 @@ async def generate_wikipedia_embeds(client, ctx, query) -> list[discord.Embed]:
             'format': 'json',
             'action': 'query'
         },
-        headers={
-            "User-Agent": "soosBot"
-        }
+        user_agent="soosBot",
+        cache=True
     )
 
-    data = await response.json()
     extract = data["query"]["pages"][str(page)]["extract"]
     if len(extract) > 1000:
         extract = extract[:997] + "..."
@@ -47,8 +42,8 @@ async def generate_wikipedia_embeds(client, ctx, query) -> list[discord.Embed]:
     return [
         discord.Embed(
             title=query,
-            description=extract,
+            description=extract.replace("==", "**"),
             color=await client.get_users_theme_color(ctx.author.id),
-            url=f"https://en.wikipedia.org/wiki/{query}"
-        )
+            url=f"https://en.wikipedia.org/wiki/{query}".replace(" ", "_")
+        ).set_author(name="Wikipedia")
     ]

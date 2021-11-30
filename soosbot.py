@@ -1,3 +1,5 @@
+import typing
+
 import discord
 from discord.ext import commands
 import aiohttp
@@ -9,11 +11,12 @@ import jishaku
 
 extensions = [
     'jishaku',
-    "extensions.programming",
+    # "extensions.programming",
     "extensions.reddit",
-    "extensions.user",
-    "extensions.information",
-    "extensions.search"
+    # "extensions.user",
+    # "extensions.information",
+    "extensions.search",
+    "extensions.remind"
 ]
 
 
@@ -28,19 +31,23 @@ class soosBot(commands.Bot):
         self.reddit = None
         self.aiohttp_session = None
         self.rapid_api_key = None
+        self.tmdb_api_key = None
+        self.random_cache = {}  # Random caching, can be used for anything.
+        self.requests_cache = {}
         self.user_agent = f"soosBot - Multi-Purpose Discord Bot. [soosBot.com] | enhanced-discord.py version : " \
                           f"{discord.__version__} | aiohttp version : {aiohttp.__version__} "
         super().__init__(
             command_prefix=command_prefix,
             case_insensitive=True,
-            intents=discord.Intents(guilds=True, messages=True, members=True, reactions=True),
+            intents=discord.Intents(guilds=True, messages=True, members=False, reactions=True),
             activity=discord.Activity(
                 type=discord.ActivityType.playing, name="soosBot.com | @soosBot"
             ),
             status=discord.Status.online,
-            owner_ids=[632320319662587922, 618209006837825547],
+            owner_ids=[632320319662587922, 618209006837825547, 793213521181147178],
+            slash_command_guilds=[793213521181147178],
             slash_commands=True,
-            # help_command=None,
+            help_command=None,
         )
 
     async def start(self, *args, **kwargs):
@@ -55,6 +62,7 @@ class soosBot(commands.Bot):
                                        password=configuration["praw"]["password"],
                                        requestor_kwargs={"session": self.aiohttp_session})
         self.rapid_api_key = configuration["rapid_api_key"]
+        self.tmdb_api_key = configuration["tmdb_api_key"]
 
         # Load all cogs in the list "cogs" to client.
         for extension in extensions:
@@ -87,7 +95,23 @@ class soosBot(commands.Bot):
         else:
             return discord.Colour.from_rgb(47, 49, 54)
 
+    async def requests(self, url, *,
+                       method: str = "get",
+                       cache: bool = None,
+                       params: dict = None,
+                       headers: dict = None,
+                       user_agent: str = None):
+        if user_agent:
+            headers = {"User-Agent": user_agent}
+        if cache and self.requests_cache.get(f"URL: {url} PARAMS: {params} HEADERS: {headers}"):
+            print("RETURNING CACHE!")
+            return self.requests_cache[f"URL: {url} PARAMS: {params} HEADERS: {headers}"]
+        if method == "get":
+            async with self.aiohttp_session.get(url, params=params, headers=headers) as response:
+                data = await response.json()
+                if cache:
+                    self.requests_cache[f"URL: {url} PARAMS: {params} HEADERS: {headers}"] = data
+                return data
+
     async def get_guilds_prefix(self, guild_id):
         return "sbb "
-
-

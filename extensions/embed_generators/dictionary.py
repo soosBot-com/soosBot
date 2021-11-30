@@ -2,22 +2,26 @@ import discord
 
 
 async def generate_dictionary_embeds(client, ctx, word) -> list[discord.Embed]:
-    response = await client.aiohttp_session.get(f"https://api.dictionaryapi.dev/api/v2/entries/en_US/{word}")
-    word_information = await response.json()
+    word_information = await client.requests(f"https://api.dictionaryapi.dev/api/v2/entries/en_US/{word}", cache=True)
     if isinstance(word_information, dict):
         return []
     embeds = []
     sayings = ""
-    try:
-        for saying in word_information[0]["phonetics"]:
-            sayings += f"**[{saying['text']}]({saying.get('audio', None)} \"Click to view audio\")**\n"
-        sayings = sayings[:-1]
-    except KeyError:
-        pass
+    for saying in word_information[0]["phonetics"]:
+        link = saying.get('audio', None)
+        if link:
+            if not link.startswith("https://"):
+                if link.startswith("//"):
+                    link = "https://" + link[2:]
+                else:
+                    link = "https://" + link
+        sayings += f"**[{saying['text']}]({link} \"Click to view audio\")**\n"
+
+    sayings = sayings[:-1]
     for i in range(len(word_information[0]['meanings'])):
         embed = discord.Embed(
             title=f"{word.title()} [{word_information[0]['meanings'][i]['partOfSpeech'].title()}]",
-            color=await client.get_users_theme_color(ctx.author.id))
+            color=await client.get_users_theme_color(ctx.author.id)).set_author(name="Dictionary")
         description = sayings
         description += "\n** **\n"
 
